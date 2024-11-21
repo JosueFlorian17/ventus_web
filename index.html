@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Radiación Solar y Velocidad del Viento</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<header>
+    <h1>Monitor de Radiación Solar y Velocidad del Viento</h1>
+</header>
+
+<section id="real-time-data">
+    <h2>Datos en Tiempo Real</h2>
+    <div class="data-panel">
+        <div>
+            <h3>Radiación Solar</h3>
+            <p><span id="solar-radiation">0</span> W/m²</p>
+        </div>
+        <div>
+            <h3>Velocidad del Viento</h3>
+            <p><span id="wind-speed">0</span> m/s</p>
+        </div>
+    </div>
+    <canvas id="realTimeChart" width="400" height="200"></canvas>
+    <canvas id="windSpeedChart" width="400" height="200"></canvas>
+</section>
+
+<section id="historical-graphs">
+    <h2>Gráficas Históricas y Tablas</h2>
+    <div class="historical-table">
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>Fecha y Hora</th>
+                    <th>Radiación Solar (W/m²)</th>
+                    <th>Velocidad del Viento (m/s)</th>
+                </tr>
+            </thead>
+            <tbody id="historical-table-body">
+                <!-- Datos históricos aparecerán aquí -->
+            </tbody>
+        </table>
+    </div>
+    <canvas id="solarGraph" width="400" height="200"></canvas>
+    <canvas id="windGraph" width="400" height="200"></canvas>
+</section>
+
+<footer>
+    <p>&copy; 2024 Proyecto Solar y Eólico</p>
+</footer>
+
+<script>
+// URL de la API de ThingSpeak
+const channelID = 'TU_CANAL_ID'; // Reemplaza con tu ID de canal
+const readAPIKey = 'TU_API_KEY'; // Reemplaza con tu clave de API de solo lectura
+
+// Variables para almacenar datos históricos
+const historicalData = {
+    labels: [],
+    solarValues: [],
+    windValues: []
+};
+
+// Configuración de gráficas en tiempo real
+const ctxSolarReal = document.getElementById('realTimeChart').getContext('2d');
+const realTimeChart = new Chart(ctxSolarReal, {
+    type: 'line',
+    data: {
+        labels: [], // Vacío inicialmente
+        datasets: [{
+            label: 'Radiación Solar (W/m²)',
+            data: [],
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 2,
+            fill: false
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            x: { title: { display: true, text: 'Tiempo' } },
+            y: { title: { display: true, text: 'Radiación Solar (W/m²)' } }
+        }
+    }
+});
+
+const ctxWindReal = document.getElementById('windSpeedChart').getContext('2d');
+const windSpeedChart = new Chart(ctxWindReal, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Velocidad del Viento (m/s)',
+            data: [],
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 2,
+            fill: false
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            x: { title: { display: true, text: 'Tiempo' } },
+            y: { title: { display: true, text: 'Velocidad del Viento (m/s)' } }
+        }
+    }
+});
+
+// Configuración de gráficas históricas
+const ctxSolarHist = document.getElementById('solarGraph').getContext('2d');
+const solarGraph = new Chart(ctxSolarHist, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Radiación Solar (W/m²)',
+            data: [],
+            borderColor: 'rgba(255, 206, 86, 1)',
+            borderWidth: 2,
+            fill: false
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            x: { title: { display: true, text: 'Tiempo' } },
+            y: { title: { display: true, text: 'Radiación Solar (W/m²)' } }
+        }
+    }
+});
+
+const ctxWindHist = document.getElementById('windGraph').getContext('2d');
+const windGraph = new Chart(ctxWindHist, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Velocidad del Viento (m/s)',
+            data: [],
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 2,
+            fill: false
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            x: { title: { display: true, text: 'Tiempo' } },
+            y: { title: { display: true, text: 'Velocidad del Viento (m/s)' } }
+        }
+    }
+});
+
+// Función para obtener datos de ThingSpeak
+async function fetchThingSpeakData() {
+    const solarResponse = await fetch(`https://api.thingspeak.com/channels/2733672/fields/1.json?api_key=ORQ5UJZGWK3ABPQ6&results=10`);
+    const windResponse = await fetch(`https://api.thingspeak.com/channels/2733672/fields/2.json?api_key=ORQ5UJZGWK3ABPQ6&results=10`);
+    
+    const solarData = await solarResponse.json();
+    const windData = await windResponse.json();
+    
+    const labels = solarData.feeds.map(feed => feed.created_at);
+    const solarValues = solarData.feeds.map(feed => parseFloat(feed.field1));
+    const windValues = windData.feeds.map(feed => parseFloat(feed.field2));
+    
+    return { labels, solarValues, windValues };
+}
+
+// Función para actualizar datos en tiempo real
+async function updateRealTimeChart() {
+    const { labels, solarValues, windValues } = await fetchThingSpeakData();
+    const latestLabel = labels[labels.length - 1];
+    const latestSolar = solarValues[solarValues.length - 1];
+    const latestWind = windValues[windValues.length - 1];
+
+    // Actualizar elementos HTML
+    document.getElementById('solar-radiation').textContent = latestSolar.toFixed(2);
+    document.getElementById('wind-speed').textContent = latestWind.toFixed(2);
+
+    // Actualizar gráficas en tiempo real
+    realTimeChart.data.labels = labels;
+    realTimeChart.data.datasets[0].data = solarValues;
+
+    windSpeedChart.data.labels = labels;
+    windSpeedChart.data.datasets[0].data = windValues;
+
+    realTimeChart.update();
+    windSpeedChart.update();
+}
+
+// Función para actualizar datos históricos
+async function updateHistoricalData() {
+    const { labels, solarValues, windValues } = await fetchThingSpeakData();
+
+    // Agregar datos históricos
+    historicalData.labels.push(...labels);
+    historicalData.solarValues.push(...solarValues);
+    historicalData.windValues.push(...windValues);
+
+    // Actualizar tablas
+    const tableBody = document.getElementById('historical-table-body');
+    labels.forEach((label, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${label}</td>
+            <td>${solarValues[index].toFixed(2)}</td>
+            <td>${windValues[index].toFixed(2)}</td>
+        `;
+        tableBody.appendChild(row);
+    });
+
+    // Actualizar gráficas históricas
+    solarGraph.data.labels = historicalData.labels;
+    solarGraph.data.datasets[0].data = historicalData.solarValues;
+
+    windGraph.data.labels = historicalData.labels;
+    windGraph.data.datasets[0].data = historicalData.windValues;
+
+    solarGraph.update();
+    windGraph.update();
+}
+
+// Actualizar ambas secciones periódicamente
+setInterval(updateRealTimeChart, 5000); // Tiempo real cada 5 segundos
+setInterval(updateHistoricalData, 30000); // Históricos cada 30 segundos
+
+</script>
+
+</body>
+</html>
